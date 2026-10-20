@@ -303,14 +303,22 @@ internal class SipSmsHandler(
                 .javaClass
                 .getMethod("getSmscIdentity")
                 .invoke(smsManager) as? Uri
-            if (i?.host.isNullOrBlank()) null else i
+            // EF_PSISMSC yields "sip:+<smsc>@<realm>". That has no "//", so it is an
+            // *opaque* Uri and getHost() is always null, which made this check discard
+            // a perfectly good SMSC identity. Validate the scheme-specific part too.
+            if (i?.host.isNullOrBlank() && i?.schemeSpecificPart.isNullOrBlank()) null else i
         } catch (t: Throwable) {
             null
         }
         Rlog.d(tag, "SMSC identity available=${smscIdentity != null}")
 
         val frameworkSmsc = normalizeSmscNumber(smsSmsc)
-        val identitySmsc = normalizeSmscNumber(smscIdentity?.host)
+        // The SMSC number is the user part of "sip:+<smsc>@<realm>"; the host is the
+        // IMS realm. Fall back to the user part when the Uri is opaque.
+        val identitySmsc = normalizeSmscNumber(
+            smscIdentity?.host
+                ?: smscIdentity?.schemeSpecificPart?.substringBefore('@')
+        )
         val managerSmsc = try {
             val smscStr = smsManager.smscAddress
             val parsed = normalizeSmscNumber(smscStr)
