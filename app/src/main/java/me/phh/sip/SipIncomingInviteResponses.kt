@@ -44,11 +44,17 @@ internal object SipIncomingInviteSdpAnswerBuilder {
             "b=AS:$sdpBandwidthAs",
             "b=RS:0",
             "b=RR:0",
-            "a=$amrTrackDesc",
+            // Keep each a=rtpmap immediately followed by its a=fmtp. Separating
+            // them (fmtp for the AMR payload after the telephone-event rtpmap)
+            // lets a parser that binds fmtp to the preceding rtpmap associate
+            // AMR parameters with telephone-event. The network's own answers
+            // always pair them, and this ordering mirrors that.
+            "a=sendrecv",
             "a=ptime:20",
             "a=$remoteMaxptime",
-            "a=$dtmfTrackDesc",
+            "a=$amrTrackDesc",
             "a=$amrFmtpAnswer",
+            "a=$dtmfTrackDesc",
             "a=fmtp:$dtmfTrack 0-15"
         )
         if (callerSupportsPrecondition) {
@@ -66,7 +72,6 @@ internal object SipIncomingInviteSdpAnswerBuilder {
                 "a=conf:qos remote sendrecv"
             )
         }
-        sdpLines += "a=sendrecv"
         /*
          * Keep generated incoming SDP bodies strictly CRLF-framed, including
          * the final line terminator. Some IMS SBCs reject/tear down the call
