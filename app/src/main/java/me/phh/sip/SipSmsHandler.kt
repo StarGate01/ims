@@ -202,7 +202,11 @@ internal class SipSmsHandler(
             return 500
         }
 
-        Rlog.d(tag, "Decoded SMS type=${sms.type} pduBytes=${sms.pdu?.size ?: 0}")
+        Rlog.d(
+            tag,
+            "Decoded SMS type=${sms.type} pduBytes=${sms.pdu?.size ?: 0}" +
+                if (sms.cause >= 0) " rpCause=${sms.cause}" else "",
+        )
         when (sms.type) {
             SmsType.RP_DATA_FROM_NETWORK -> {
                 val receivedCb = onSmsReceived

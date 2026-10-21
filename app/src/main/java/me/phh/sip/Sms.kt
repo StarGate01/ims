@@ -32,6 +32,8 @@ data class SipSms(
     val type: SmsType,
     val ref: Byte,
     val pdu: ByteArray?,
+    /** RP-Cause value for RP-ERROR, or -1 when the message carries no cause. */
+    val cause: Int = -1,
 )
 
 // catch java.nio.BufferUnderflowException if buffer too small
@@ -101,9 +103,26 @@ fun ByteArray.SipSmsDecode(): SipSms? {
         SmsType.RP_ERROR_FROM_NETWORK.value -> {
             val ref = buf.get()
 
-            return SipSms(SmsType.RP_ERROR_FROM_NETWORK, ref, null)
+            /* RP-Cause is a mandatory LV (TS 24.011 clause 7.3.3) and is the only
+             * field saying *why* the network refused the submission, so decode it:
+             * without it every rejection looks alike and is undiagnosable. An
+             * optional RP-User Data TLV holding an SMS-SUBMIT-REPORT may follow;
+             * it carries no cause beyond TP-FCS, so it stays ignored.
+             */
+            val cause =
+                if (buf.remaining() >= 2) {
+                    val causeLen = buf.get().toUByte().toInt()
+                    if (causeLen >= 1 && buf.remaining() >= 1) {
+                        buf.get().toInt() and 0x7f
+                    } else {
+                        -1
+                    }
+                } else {
+                    -1
+                }
+
+            return SipSms(SmsType.RP_ERROR_FROM_NETWORK, ref, null, cause)
         }
-        // RP_ERROR_FROM_NETWORK possible
         else -> {
             Rlog.w(TAG, "Got unhandled SMS pdu of type ${type}")
             return null
