@@ -3233,7 +3233,13 @@ fun onWfcDisabled(reason: String) {
     }
 
     fun register(_writer: OutputStream? = null) {
-        RegistrationCellInfoLogger.log(TAG, subTelephonyManager)
+        // Diagnostics only: getAllCellInfo() throws SecurityException when the location
+        // permissions are missing, and an unguarded call here aborts REGISTER entirely.
+        try {
+            RegistrationCellInfoLogger.log(TAG, subTelephonyManager)
+        } catch (t: Throwable) {
+            Rlog.w(TAG, "Could not log registration cell info", t)
+        }
 
         // XXX samsung rom apparently regenerates local SPIC/SPIS every register,
         // this doesn't affect current connections but possibly affects new incoming
