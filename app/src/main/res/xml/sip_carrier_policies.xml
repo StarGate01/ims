@@ -29,6 +29,11 @@
         </string-array>
     </carrier>
 
+    <!-- AOSP canonical carrierId 2536; MO SMS is barred without PANI. -->
+    <carrier mccmnc="262023" name="1&amp;1 Germany">
+        <string name="outgoing_pani_policy" value="LTE_CELL_IDENTITY" />
+    </carrier>
+
     <!-- AOSP canonical carrierId 1736. -->
     <carrier mccmnc="286002" name="Vodafone Turkey">
         <string-array name="plain_tel_short_codes">
