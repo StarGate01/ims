@@ -98,7 +98,15 @@ internal object SipIncomingInviteProvisionalHeaders {
                     Require: 100rel${if (callerSupportsPrecondition) ", precondition" else ""}
                     RSeq: $reliableSequence
                     """.toSipHeadersMap() +
-                        request.headers.filter { (k, _) -> k in listOf("cseq", "via", "from", "to", "call-id", "record-route") } +
+                        request.headers.filter { (k, _) ->
+                            // session-expires/min-se are carried through so the final 200 OK can
+                            // negotiate RFC 4028 session timers; SipIncomingInviteFinalResponses
+                            // strips them again and substitutes the negotiated values.
+                            k in listOf(
+                                "cseq", "via", "from", "to", "call-id", "record-route",
+                                "session-expires", "min-se",
+                            )
+                        } +
                         mapOf("to" to toWithTag) -
             "route" - "security-verify"
     }
@@ -277,7 +285,14 @@ internal object SipIncomingInviteFinalResponses {
     fun acceptedFinalResponseWriteContext(acceptedCallId: String): String =
         "incoming INVITE final 200 OK callId=$acceptedCallId"
 
-    fun shouldOmitFinalSdp(hasEarlyMedia: Boolean): Boolean = hasEarlyMedia
+    /**
+     * The answer may be left out of the final 200 OK only when it has already
+     * been delivered in a reliable provisional response *and* the peer PRACKed
+     * it. A peer that advertises 100rel but never PRACKs still needs the answer
+     * in the 200 OK, so offer/answer completion is tracked rather than assumed.
+     */
+    fun shouldOmitFinalSdp(hasEarlyMedia: Boolean, reliableAnswerAcknowledged: Boolean): Boolean =
+        hasEarlyMedia && reliableAnswerAcknowledged
 
     fun omitFinalSdpLogMessage(acceptedCallId: String): String =
         "Omitting SDP from final incoming 200 OK because reliable provisional/UPDATE offer-answer already completed " +

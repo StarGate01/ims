@@ -257,7 +257,8 @@ internal object SipIncomingInviteDialogSetup {
     fun plainRingingResponse(
         headers: Map<String, List<String>>,
     ): SipResponse {
-        val ringingHeaders = headers - "rseq" - "content-type" - "require" - "p-access-network-info" +
+        val ringingHeaders = headers - "rseq" - "content-type" - "require" - "p-access-network-info" -
+            "session-expires" - "min-se" +
             """
 Supported: replaces, timer
 Content-Length: 0
