@@ -7,6 +7,13 @@ class PrackWaitTracker {
     private val lock = Object()
     private val pending = mutableSetOf<Int>()
 
+    /**
+     * Whether the peer PRACKed any reliable provisional response we sent in the
+     * current dialog. Offer/answer is only complete once that has happened, so
+     * the final 200 OK may omit the SDP answer only if this is true.
+     */
+    private var acknowledgedAny = false
+
     fun add(id: Int) {
         synchronized(lock) {
             pending += id
@@ -16,9 +23,12 @@ class PrackWaitTracker {
     fun ack(id: Int) {
         synchronized(lock) {
             pending -= id
+            acknowledgedAny = true
             lock.notifyAll()
         }
     }
+
+    fun anyAcknowledged(): Boolean = synchronized(lock) { acknowledgedAny }
 
     fun waitFor(id: Int) {
         synchronized(lock) {
@@ -31,6 +41,11 @@ class PrackWaitTracker {
     fun clearAndNotifyAll() {
         synchronized(lock) {
             pending.clear()
+            // Reset per dialog: a PRACK from a previous call must not make a
+            // later 200 OK omit its answer. dropStaleBeforeAccept() deliberately
+            // does not reset it, since by then the PRACK may legitimately have
+            // arrived for this dialog.
+            acknowledgedAny = false
             lock.notifyAll()
         }
     }

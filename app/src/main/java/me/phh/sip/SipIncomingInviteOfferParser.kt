@@ -81,15 +81,26 @@ internal object SipIncomingInviteCapabilityParser {
         }
         val incomingOfferIsInactive = attributes.any { it.equals("inactive", ignoreCase = true) }
         val callerSupportsPrecondition = callerSupportsPreconditionHeader || incomingOfferHasPrecondition
-        // Some carriers send incoming VoLTE as inactive media with mandatory QoS
-        // preconditions and will not open downlink RTP until the provisional SDP is
-        // acknowledged with PRACK. Keep the old plain-180 path for simple incoming
-        // offers because at least one tested network did not PRACK reliable 183.
+        // Deliver the SDP answer in a reliable 183 whenever the caller
+        // advertises both 100rel and early media. Some IMS cores (Mavenir, as
+        // deployed by 1&1/Vodafone DE) run an early-media session towards the
+        // caller and discard a 200 OK that carries a late answer: they never
+        // ACK it, never forward it to the caller, and BYE the dialog ~150 ms
+        // later with no Reason header.
+        //
+        // The narrower precondition case is kept as its own trigger: carriers
+        // that offer inactive media with mandatory QoS preconditions will not
+        // open downlink RTP until the provisional SDP is PRACKed.
+        //
+        // A peer that advertises 100rel but never PRACKs is handled by
+        // shouldOmitFinalSdp(), which keeps the answer in the 200 OK until a
+        // PRACK has actually completed offer/answer.
         val sendReliable183 =
             callerSupports100Rel &&
-                callerSupportsPrecondition &&
-                incomingOfferHasPrecondition &&
-                incomingOfferIsInactive
+                (
+                    peerSupportsEarlyMedia ||
+                        (callerSupportsPrecondition && incomingOfferHasPrecondition && incomingOfferIsInactive)
+                    )
         val remoteMaxptime = attributes.firstOrNull { it.startsWith("maxptime:") } ?: "maxptime:20"
         Rlog.d(
             logTag,

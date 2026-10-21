@@ -4767,7 +4767,10 @@ fun onWfcDisabled(reason: String) {
         call: Call,
         acceptedCallId: String,
     ): AcceptedIncomingInviteFinalSdp {
-        val omitFinalSdp = SipIncomingInviteFinalResponses.shouldOmitFinalSdp(call.hasEarlyMedia)
+        val omitFinalSdp = SipIncomingInviteFinalResponses.shouldOmitFinalSdp(
+            hasEarlyMedia = call.hasEarlyMedia,
+            reliableAnswerAcknowledged = prAckWaitTracker.anyAcknowledged(),
+        )
         var acceptedCall = call
         if (!omitFinalSdp) {
             val finalIncomingSdp = completeIncomingPreconditionAnswerSdp(acceptedCall.sdp, acceptedCallId)
@@ -7237,7 +7240,8 @@ fun onWfcDisabled(reason: String) {
         )
 
         if (duplicateAnswered) {
-            val duplicateOmitFinalSdp = refreshedCall.hasEarlyMedia
+            val duplicateOmitFinalSdp =
+                refreshedCall.hasEarlyMedia && prAckWaitTracker.anyAcknowledged()
             val duplicateFinalBody = if (!duplicateOmitFinalSdp) {
                 completeIncomingPreconditionAnswerSdp(refreshedCall.sdp, incomingCallId)
             } else {
