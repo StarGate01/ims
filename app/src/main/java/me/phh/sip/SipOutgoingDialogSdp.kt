@@ -368,18 +368,25 @@ internal object SipOutgoingDialogSdp {
                 val track = m.split("[: ]+".toRegex()).getOrNull(1)?.toIntOrNull()
                 if (track != null && offeredPayloads.contains(track)) Pair(track, m) else null
             }
-            val sorted = matches.sortedBy { m ->
+            // An answer agreeing octet-align=1 is not usable: this stack only emits
+            // bandwidth-efficient AMR, so selecting that track would mean sending a framing the
+            // peer did not agree to. Exclude it rather than merely deprioritising it, which is
+            // what the sort below used to do -- and which selected it anyway whenever it was the
+            // only match. The caller's existing fallback then applies.
+            val eligible = matches.filterNot { m ->
                 val fmtp = responseTrackRequirements(m.first).orEmpty()
-                when {
-                    fmtp.contains("octet-align=1", ignoreCase = true) &&
-                        notAdditional.isNotEmpty() &&
-                        fmtp.contains(notAdditional, ignoreCase = true) -> 100
-                    fmtp.contains("octet-align=1", ignoreCase = true) -> 100
-                    else -> 0
-                }
+                fmtp.contains("octet-align=1", ignoreCase = true) ||
+                    (notAdditional.isNotEmpty() && fmtp.contains(notAdditional, ignoreCase = true))
             }
-            Rlog.d(logTag, "Outgoing answer matching $codec offered=$offeredPayloads got=$sorted")
-            return sorted.firstOrNull()
+            if (eligible.size != matches.size) {
+                Rlog.w(
+                    logTag,
+                    "Outgoing answer offers $codec only with a framing this stack cannot send; " +
+                        "excluded ${matches.size - eligible.size} payload(s)",
+                )
+            }
+            Rlog.d(logTag, "Outgoing answer matching $codec offered=$offeredPayloads got=$eligible")
+            return eligible.firstOrNull()
         }
 
         val selectedAudioCodec = SipAudioCodecNegotiator.selectOutgoingSpeechCodecFromAnswer(
