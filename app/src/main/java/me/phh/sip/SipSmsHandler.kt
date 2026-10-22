@@ -24,6 +24,7 @@ internal class SipSmsHandler(
     private val sipWriteFailureListener: (String) -> Unit,
     private val timeoutScheduler: (Long, () -> Unit) -> Unit,
     private val registrationTechProvider: () -> Int,
+    private val accessNetworkHeadersProvider: () -> SipHeadersMap = { emptyMap() },
 ) {
     var onSmsReceived: ((Int, String, ByteArray) -> Unit)? = null
     var onSmsStatusReportReceived: ((Int, String, ByteArray) -> Unit)? = null
@@ -439,10 +440,26 @@ internal class SipSmsHandler(
         } else {
             "Supported: path"
         }
+        /*
+         * TS 24.229 clause 5.1.2A.1 requires P-Access-Network-Info on every UE
+         * request. An IP-SM-GW may also use it to authorize the submission against
+         * the serving access network, and answer RP-ERROR with RP-Cause 10 ("call
+         * barred") when it is absent -- seen on carriers whose subscribers reach
+         * the network through national roaming. Only the outgoing INVITE applied
+         * the carrier's PANI policy, so SMS could never carry the header.
+         *
+         * Emitted exactly when the carrier policy asks for it, so carriers left at
+         * OutgoingPaniPolicy.NONE are unaffected.
+         */
+        val accessNetworkHeaders = accessNetworkHeadersProvider()
+            .mapKeys { (name, _) -> name.lowercase() }
+        if (accessNetworkHeaders.isNotEmpty()) {
+            Rlog.d(tag, "Outgoing IMS SMS carries $accessNetworkHeaders")
+        }
         val msg = SipRequest(
             SipMethod.MESSAGE,
             requestUri,
-            commonHeadersProvider() + """
+            commonHeadersProvider() + accessNetworkHeaders + """
                 From: <$mySip>
                 To: <$dest>
                 P-Preferred-Identity: <$mySip>

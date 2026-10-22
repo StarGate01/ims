@@ -23,15 +23,32 @@ class SipAccessNetworkHeadersTest {
     }
 
     @Test
-    fun `invalid LTE identity produces no headers`() {
+    fun `unusable LTE identity degrades to the bare access type`() {
+        // The cell-id parameter is optional; dropping the whole header instead makes a
+        // network that authorizes on the serving access network reject the request.
+        val headers = SipAccessNetworkHeaders.lteHeaders(
+            mcc = "001",
+            mnc = null,
+            tac = 0x1234,
+            ci = 0x0056789a,
+            visitedNetworkId = "ims.example.test",
+        )
+
+        require(headers["P-Access-Network-Info"] == listOf("3GPP-E-UTRAN-FDD"))
+        require(headers["P-Visited-Network-ID"] == listOf("\"ims.example.test\""))
+    }
+
+    @Test
+    fun `unavailable cell identity fields degrade to the bare access type`() {
+        // CellIdentityLte reports Integer.MAX_VALUE for a field it does not know.
         require(
             SipAccessNetworkHeaders.lteHeaders(
                 mcc = "001",
-                mnc = null,
-                tac = 0x1234,
-                ci = 0x0056789a,
-                visitedNetworkId = "ims.example.test",
-            ).isEmpty(),
+                mnc = "01",
+                tac = Int.MAX_VALUE,
+                ci = Int.MAX_VALUE,
+                visitedNetworkId = null,
+            )["P-Access-Network-Info"] == listOf("3GPP-E-UTRAN-FDD"),
         )
     }
 

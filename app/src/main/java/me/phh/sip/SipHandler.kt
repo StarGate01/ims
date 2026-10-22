@@ -561,6 +561,17 @@ private val smsHandler = SipSmsHandler(
         sipWriteFailureListener = { reason -> reconnectIms(reason) },
         timeoutScheduler = { delayMs, action -> myHandler.postDelayed({ action() }, delayMs) },
         registrationTechProvider = { imsRegistrationTech },
+        accessNetworkHeadersProvider = {
+            SipAccessNetworkHeaders.forOutgoingRequest(
+                logTag = TAG,
+                telephonyManager = subTelephonyManager,
+                registrationTech = imsRegistrationTech,
+                policy = carrierSettings.policy.outgoingPaniPolicy,
+                visitedNetworkPolicy =
+                    carrierSettings.policy.outgoingVisitedNetworkPolicy,
+                visitedNetworkId = realm,
+            )
+        },
     )
 
     private val sessionRefresher = SipSessionRefresher(
@@ -5507,7 +5518,7 @@ fun onWfcDisabled(reason: String) {
             sessionExpiresSeconds = outgoingInviteSessionTimer.sessionExpiresSeconds,
             minSeSeconds = outgoingInviteSessionTimer.minSeSeconds,
             generatedCallIdHeaders = generateCallId(),
-            accessNetworkHeaders = SipAccessNetworkHeaders.forOutgoingInvite(
+            accessNetworkHeaders = SipAccessNetworkHeaders.forOutgoingRequest(
                 logTag = TAG,
                 telephonyManager = subTelephonyManager,
                 registrationTech = imsRegistrationTech,
