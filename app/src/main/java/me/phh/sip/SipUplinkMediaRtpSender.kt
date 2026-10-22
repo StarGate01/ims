@@ -69,10 +69,12 @@ object SipUplinkMediaRtpSender {
                     e,
                 )
             }
-            // Deliberately report success for an isolated failure. The caller stops draining the
-            // encoder when this returns false, which would leave encoded output buffered and can
-            // then block it from accepting input; a dropped datagram is not worth that. A
-            // sustained run is reported through onSendFailure instead.
+            // Deliberately report success for an isolated failure. Returning false breaks the
+            // caller's inner frame loop, discarding the frames remaining in the output buffer it
+            // is draining -- a whole packet's worth of audio thrown away over one dropped
+            // datagram. (It does not deadlock the codec: the output buffer is released before
+            // this is called, and the outer drain loop continues.) A sustained run is reported
+            // through onSendFailure instead.
             return true
         }
 

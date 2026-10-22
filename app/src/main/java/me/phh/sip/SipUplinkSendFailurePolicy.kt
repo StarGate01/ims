@@ -4,9 +4,9 @@ package me.phh.sip
 /**
  * Whether a run of failed RTP transmissions should be treated as the uplink being lost.
  *
- * A single failed datagram is normal and must not disturb the media path: the caller keeps
- * draining the encoder, because stopping would leave encoded output buffered and the codec can
- * then refuse further input. Only a sustained run means the socket or the bearer is gone.
+ * A single failed datagram is normal and must not disturb the media path: reporting it as a
+ * failure breaks the caller's frame loop and discards the rest of the output buffer being
+ * drained. Only a sustained run means the socket or the bearer is gone.
  */
 internal object SipUplinkSendFailurePolicy {
     /**
