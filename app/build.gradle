@@ -16,7 +16,10 @@ android {
         applicationId "me.phh.ims"
         minSdk 32
         targetSdk 33
-        versionCode 33
+        // Bumped from upstream's 33: PackageManager will not re-scan a replaced
+        // system APK that keeps the same versionCode, so every local rebuild that
+        // changes the manifest needs this incremented. See samsung-calling.md §7.
+        versionCode 68
         versionName "1.0"
 
         }
