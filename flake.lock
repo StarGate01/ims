@@ -1,0 +1,44 @@
+{
+  "nodes": {
+    "android-hidden-api": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1783952423,
+        "narHash": "sha256-EgdBGITyZ8UYq25NYAg15u7HHtS6bhT1VzluQDvmChI=",
+        "owner": "anggrayudi",
+        "repo": "android-hidden-api",
+        "rev": "98ceeb4251e310fd4dd436ffd2f603f02962078f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "anggrayudi",
+        "repo": "android-hidden-api",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1788179007,
+        "narHash": "sha256-hn1oU2rue2SYK8dAr8+WNZWtbsz1S2W5mnHlSEuh3bo=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "34ab99075ac4f7e40cf037eef32cb1c360bb85e9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "android-hidden-api": "android-hidden-api",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
