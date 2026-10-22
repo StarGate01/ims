@@ -124,6 +124,14 @@ internal class SipDispatcher(
             return handleResponse(msg)
         }
 
+        if (msg == null && reader.hasMoreInput()) {
+            // An empty line where a message was expected: a keepalive pong (RFC 5626) or one of
+            // the stray CRLFs RFC 3261 section 7.5 permits between messages. The stream is still
+            // healthy, so keep reading instead of tearing the connection down.
+            Rlog.d(tag, "Skipping an empty line before the next SIP message")
+            return true
+        }
+
         if (msg !is SipRequest) {
             Rlog.d(tag, "Got invalid message! Closing socket (except main)")
             return false
@@ -167,6 +175,7 @@ internal class SipDispatcher(
                 486 -> "Busy Here"
                 487 -> "Request Terminated"
                 488 -> "Not Acceptable Here"
+                491 -> "Request Pending"
                 500 -> "Server Internal Error"
                 603 -> "Decline"
                 else -> "ERROR"

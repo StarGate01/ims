@@ -8852,6 +8852,19 @@ fun onWfcDisabled(reason: String) {
             request.headers["from"]?.any { it.contains(";tag=", ignoreCase = true) } == true &&
             request.headers["to"]?.any { it.contains(";tag=", ignoreCase = true) } == true
         if (existingCall != null && isInDialogInvite) {
+            // RFC 3261 14.2: a UAS that already has an INVITE outstanding on the dialog must
+            // answer a re-INVITE with 491 rather than processing both. Without this, two
+            // overlapping offer/answer exchanges race and the media state follows whichever
+            // finishes last -- reachable here whenever the network re-INVITEs while our own hold
+            // or resume is still in flight.
+            if (pendingOutgoingInvite?.callId == incomingCallId) {
+                Rlog.w(
+                    TAG,
+                    "Answering in-dialog INVITE with 491 while our own INVITE is pending: " +
+                        "callId=$incomingCallId",
+                )
+                return 491
+            }
             return handleInDialogInvite(request, existingCall, incomingResponseWriter)
         }
         handleDuplicateIncomingInviteForExistingDialog(
