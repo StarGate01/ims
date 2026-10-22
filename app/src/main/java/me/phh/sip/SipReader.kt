@@ -11,7 +11,12 @@ internal const val SIP_MAX_HEADER_LINE_BYTES = 8 * 1024
 
 internal class SipParseException(message: String) : IOException(message)
 
-fun InputStream.sipReader(): SipReader = SipReader(this)
+/**
+ * @param streamTransport true for TCP/TLS, where RFC 3261 section 20.14 makes Content-Length
+ *   mandatory because the stream carries no other message boundary.
+ */
+fun InputStream.sipReader(streamTransport: Boolean = false): SipReader =
+    SipReader(this, streamTransport)
 
 /**
  * Byte-oriented SIP reader.
@@ -20,7 +25,11 @@ fun InputStream.sipReader(): SipReader = SipReader(this)
  * safely frame a message. A one-byte pushback buffer is enough to inspect the
  * first byte of the next physical line while unfolding legacy header lines.
  */
-class SipReader(input: InputStream) : InputStream() {
+class SipReader(
+    input: InputStream,
+    /** See [sipReader]: affects diagnostics for a message with no Content-Length. */
+    val streamTransport: Boolean = false,
+) : InputStream() {
     private val input = PushbackInputStream(BufferedInputStream(input), 1)
 
     override fun read(): Int = input.read()

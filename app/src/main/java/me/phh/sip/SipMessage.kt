@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: GPL-2.0
 package me.phh.sip
 
+import android.telephony.Rlog
+
 import java.util.concurrent.atomic.AtomicInteger
 
 /* type definitions */
@@ -369,6 +371,16 @@ fun SipReader.parseMessage(): SipMessage? {
     }
     if (contentLengths.distinct().size > 1) {
         throw SipParseException("Conflicting Content-Length headers: $contentLengths")
+    }
+    if (contentLengths.isEmpty() && this.streamTransport) {
+        // RFC 3261 section 20.14: Content-Length is mandatory on a stream transport, which has no
+        // other message boundary. Treating the body as empty is the only option left, but if the
+        // peer did send one its bytes are still in the stream and will be read as the start of
+        // the next message, so say so rather than desynchronising silently.
+        Rlog.w(
+            "SipReader",
+            "SIP message on a stream transport has no Content-Length; assuming an empty body",
+        )
     }
     val body = this.readNBytes2(contentLengths.firstOrNull() ?: 0)
     // TODO: parse body depending on content type (e.g. multipart)

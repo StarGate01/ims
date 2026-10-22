@@ -172,7 +172,7 @@ class SipConnectionTcp(
                 localPort = socket.localPort
             }
             writer = socket.getOutputStream()
-            reader = socket.getInputStream().sipReader()
+            reader = socket.getInputStream().sipReader(streamTransport = true)
             connected = true
         }
     }
@@ -266,7 +266,7 @@ class SipConnectionTcp(
                     SIP_TCP_CONNECT_TIMEOUT_MS,
                 )
                 val replacementWriter = replacement.getOutputStream()
-                val replacementReader = replacement.getInputStream().sipReader()
+                val replacementReader = replacement.getInputStream().sipReader(streamTransport = true)
 
                 socket = replacement
                 writer = replacementWriter
@@ -354,7 +354,7 @@ class SipConnectionTcpServer(
         acceptedClients.add(client)
         return AcceptedTcpSipFlow(
             socket = client,
-            reader = client.getInputStream().sipReader(),
+            reader = client.getInputStream().sipReader(streamTransport = true),
             writer = client.getOutputStream(),
         )
     }
