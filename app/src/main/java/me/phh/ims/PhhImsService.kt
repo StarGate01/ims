@@ -9,10 +9,13 @@ import android.content.IntentFilter
 import android.os.Binder
 import android.os.SystemClock
 import android.telephony.Rlog
+import android.telephony.TelephonyManager
 import android.telephony.ims.ImsService
+import android.telephony.ims.feature.ImsFeature
 import android.telephony.ims.feature.MmTelFeature
 import android.telephony.ims.feature.RcsFeature
 import android.telephony.ims.stub.ImsConfigImplBase
+import android.telephony.ims.stub.ImsFeatureConfiguration
 import android.telephony.ims.stub.ImsRegistrationImplBase
 
 class PhhImsService : ImsService() {
@@ -219,6 +222,34 @@ class PhhImsService : ImsService() {
 
         if (instance === this) instance = null
         super.onDestroy()
+    }
+
+    /**
+     * Declares MMTEL for every modem slot.
+     *
+     * `ImsResolver` reads the manifest `MMTEL_FEATURE` metadata only for the ImsService that was
+     * the configured device service when it scanned, and falls back to this query otherwise. The
+     * manifest path is the one normally taken here, so this exists to keep the features declared
+     * when it is not -- for instance when the binding comes from a carrier-config override rather
+     * than from the device overlay.
+     *
+     * Kept in step with the manifest deliberately: it must not advertise a feature the manifest
+     * does not, or the set of features depends on how the service happened to be resolved.
+     */
+    override fun querySupportedImsFeatures(): ImsFeatureConfiguration {
+        val slots = try {
+            getSystemService(TelephonyManager::class.java)?.activeModemCount ?: 1
+        } catch (t: Throwable) {
+            Rlog.w(TAG, "Could not read the modem count; declaring MMTEL for slot 0 only", t)
+            1
+        }
+
+        Rlog.d(TAG, "querySupportedImsFeatures slots=$slots")
+        val builder = ImsFeatureConfiguration.Builder()
+        for (slot in 0 until slots.coerceAtLeast(1)) {
+            builder.addFeature(slot, ImsFeature.FEATURE_MMTEL)
+        }
+        return builder.build()
     }
 
     override fun readyForFeatureCreation() {
