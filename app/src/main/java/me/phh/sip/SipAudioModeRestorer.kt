@@ -20,6 +20,22 @@ object SipAudioModeRestorer {
         }
 
         val currentMode = audioManager.mode
+
+        // Only release a mode this stack actually claimed. previousMode is what the mode was
+        // before the media path started, so MODE_IN_COMMUNICATION there means somebody else --
+        // the telephony framework, for a call reported as using VoIP audio mode -- already owned
+        // it and is driving its own reset. Forcing MODE_NORMAL here would race that reset, which
+        // AudioService reports as "Timeout waiting for audio mode reset", and would be the
+        // release-side mirror of the acquisition the uplink starter deliberately skips.
+        if (previousMode == AudioManager.MODE_IN_COMMUNICATION) {
+            Rlog.d(
+                logTag,
+                "Audio mode was already MODE_IN_COMMUNICATION before this call; leaving it to " +
+                    "its owner: reason=$reason currentMode=$currentMode",
+            )
+            return
+        }
+
         val wantedMode = when (previousMode ?: currentMode) {
             AudioManager.MODE_IN_CALL,
             AudioManager.MODE_IN_COMMUNICATION,
