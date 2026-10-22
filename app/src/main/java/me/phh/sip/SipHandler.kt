@@ -6734,7 +6734,44 @@ fun onWfcDisabled(reason: String) {
         // payloads into generic AMR storage frames for MediaCodec.  The old code
         // only decoded FT=7, which made calls silent whenever the network switched
         // to a lower AMR mode such as FT=2.
-        val pt = SipRtpPacketParser.payloadType(dgramBuf)
+        //
+        // Classify against the payload types this dialog negotiated first, so a telephone-event
+        // packet is not handed to the speech decoder: it shares this stream, and its four payload
+        // bytes can satisfy a permissive AMR parse.
+        val disposition = SipRtpPacketParser.disposition(
+            packet = dgramBuf,
+            length = dgram.length,
+            speechPayloadType = receiveCall.amrTrack,
+            telephoneEventPayloadType = receiveCall.dtmfTrack,
+        )
+        val pt = SipRtpPacketParser.payloadType(dgramBuf, dgram.length)
+        when (disposition) {
+            SipRtpPacketParser.Disposition.DROP_NOT_RTP -> {
+                if (receivedCount <= 5) {
+                    Rlog.w(
+                        TAG,
+                        "Dropping non-RTP datagram on the media socket: length=${dgram.length}",
+                    )
+                }
+                return
+            }
+            SipRtpPacketParser.Disposition.SKIP_TELEPHONE_EVENT -> {
+                if (receivedCount <= 5) {
+                    Rlog.d(TAG, "Skipping inbound telephone-event packet pt=$pt")
+                }
+                return
+            }
+            SipRtpPacketParser.Disposition.DECODE_UNEXPECTED_TYPE ->
+                if (receivedCount <= 5) {
+                    Rlog.w(
+                        TAG,
+                        "Inbound RTP payload type $pt is neither the negotiated speech type " +
+                            "${receiveCall.amrTrack} nor the telephone-event type " +
+                            "${receiveCall.dtmfTrack}; attempting to decode it anyway",
+                    )
+                }
+            SipRtpPacketParser.Disposition.DECODE_SPEECH -> Unit
+        }
         val amrFrame = SipAmrRtpPayload.storageFrameFromBandwidthEfficientRtp(audioCodec, dgramBuf, dgram.length)
         val ftForLog = amrFrame?.ft ?: 15
 
@@ -6742,7 +6779,7 @@ fun onWfcDisabled(reason: String) {
             logTag = TAG,
             receivedCount = receivedCount,
             packet = dgram,
-            payloadType = pt,
+            payloadType = pt ?: -1,
             frameType = ftForLog,
             codecFrameSize = amrFrame?.codecFrame?.size ?: 0,
         )
