@@ -158,7 +158,7 @@ internal class SipSmsHandler(
     private fun failPendingOutgoingSmsForSipResponse(callId: String, response: SipResponse) {
         val pending = smsLock.withLock {
             pendingOutgoingSmsByCallId.remove(callId)?.also {
-                pendingOutgoingSmsByRef.remove(it.ref)
+                forgetRefIfStillOwnedBy(it)
             }
         } ?: return
 
@@ -179,7 +179,7 @@ internal class SipSmsHandler(
     private fun failPendingOutgoingSmsForWriteFailure(callId: String, reason: String) {
         val pending = smsLock.withLock {
             pendingOutgoingSmsByCallId.remove(callId)?.also {
-                pendingOutgoingSmsByRef.remove(it.ref)
+                forgetRefIfStillOwnedBy(it)
             }
         } ?: return
 
