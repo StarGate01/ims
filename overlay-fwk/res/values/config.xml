@@ -6,4 +6,16 @@
 	     the audio mode, which is the prerequisite for its in-call route controls
 	     to take effect. -->
 	<bool name="config_use_voip_mode_for_ims">true</bool>
+
+	<!-- Let the IMS stack read an unredacted ServiceState, and so the serving cell identity,
+	     without holding a location permission. ServiceState is location-sanitized for callers
+	     outside this list, which strips the cell identity that P-Access-Network-Info needs: an
+	     IP-SM-GW that authorizes MO SMS against the access network then bars the submission.
+	     Listing the package here is narrower than granting it ACCESS_FINE_LOCATION, since it
+	     exposes the serving cell only. com.android.phone is the framework default and must be
+	     kept, as this array replaces rather than extends it. -->
+	<string-array name="config_serviceStateLocationAllowedPackages">
+		<item>com.android.phone</item>
+		<item>me.phh.ims</item>
+	</string-array>
 </resources>
