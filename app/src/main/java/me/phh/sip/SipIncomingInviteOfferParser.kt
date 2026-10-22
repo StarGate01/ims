@@ -142,8 +142,10 @@ internal object SipIncomingInviteMediaSelector {
         amrWbMediaCodecAvailable: Boolean,
         logTag: String,
     ): IncomingInviteMediaSelection? {
+        fun fmtpFor(track: Int): String =
+            attributes.firstOrNull { it.startsWith("fmtp:$track") }.orEmpty()
+
         fun lookTrackMatching(codec: String, additional: String = "", notAdditional: String = ""): Pair<Int,String>? {
-            //TODO: also match on fmtp
             val maps = attributes.filter { it.startsWith("rtpmap") && it.contains(codec) }
             val matches = maps.map { m ->
                 val track = m.split("[: ]+".toRegex())[1].toInt()
@@ -151,16 +153,38 @@ internal object SipIncomingInviteMediaSelector {
                 Pair(track, desc)
             }
             Rlog.d(logTag, "Matching $codec, got $matches")
-            val matches2 = if(matches.size > 1) {
-                matches.sortedBy { m ->
-                    val fmtp = attributes.firstOrNull { it.startsWith("fmtp:${m.first}") }.orEmpty()
+
+            // notAdditional is an exclusion, not a preference. This stack only emits
+            // bandwidth-efficient AMR, so answering a payload the offer marks octet-align=1 would
+            // agree a framing we never send: the call would connect and the audio would be
+            // undecodable. An offer carrying no compatible payload must be refused instead, which
+            // the caller turns into 488 Not Acceptable Here.
+            //
+            // An AMR payload with no fmtp at all stays eligible: RFC 4867 defaults octet-align to
+            // 0, which is what we send. It is only deprioritised below.
+            val eligible = if (notAdditional.isEmpty()) {
+                matches
+            } else {
+                matches.filterNot { m ->
+                    fmtpFor(m.first).contains(notAdditional, ignoreCase = true)
+                }.also { kept ->
+                    if (kept.size != matches.size) {
+                        Rlog.w(
+                            logTag,
+                            "Excluded ${matches.size - kept.size} $codec payload(s) offering " +
+                                "$notAdditional, which this stack cannot send: kept $kept",
+                        )
+                    }
+                }
+            }
+
+            val matches2 = if(eligible.size > 1) {
+                eligible.sortedBy { m ->
+                    val fmtp = fmtpFor(m.first)
                     Rlog.d(logTag, "Matching $codec, for match $m got fmtp $fmtp")
                     when {
                         // For AMR, do not prefer an rtpmap-only payload when valid fmtp payloads exist.
                         codec.startsWith("AMR") && fmtp.isEmpty() -> 100
-
-                        // This stack currently sends bandwidth-efficient AMR, so avoid octet-align=1.
-                        notAdditional.isNotEmpty() && fmtp.contains(notAdditional) -> 90
 
                         // Optional positive preference for codecs/callers where we have one.
                         additional.isNotEmpty() && fmtp.contains(additional) -> 0
@@ -169,7 +193,7 @@ internal object SipIncomingInviteMediaSelector {
                     }
                 }
             } else {
-                matches
+                eligible
             }
             Rlog.d(logTag, "Matching2 $codec, got $matches2")
             return matches2.firstOrNull()
