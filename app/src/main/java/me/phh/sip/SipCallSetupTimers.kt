@@ -13,25 +13,42 @@ internal class SipCallSetupTimers(
 ) {
     private var outgoingCallId: String? = null
     private var outgoingGeneration = 0
+    private var outgoingRingbackCallId: String? = null
     private var incomingCallId: String? = null
     private var incomingGeneration = 0
 
     fun onOutgoingInviteResponse(callId: String, statusCode: Int) {
-        when {
-            statusCode == 100 -> startOutgoing(
+        val action = SipCallSetupTimerDecision.onOutgoingInviteResponse(
+            statusCode = statusCode,
+            callId = callId,
+            armedCallId = outgoingCallId,
+            ringbackCallId = outgoingRingbackCallId,
+        )
+        when (action) {
+            SipCallSetupTimerAction.START_INVITE_TIMEOUT -> startOutgoing(
                 callId,
                 policy().inviteTimeoutMs,
                 "INVITE response timeout",
             )
-            statusCode == 180 -> {
+            SipCallSetupTimerAction.START_RINGBACK_TIMEOUT -> {
                 cancelOutgoing("180 Ringing")
+                outgoingRingbackCallId = callId
                 startOutgoing(
                     callId,
                     policy().ringbackTimeoutMs,
                     "ringback timeout",
                 )
             }
-            statusCode > 100 -> cancelOutgoing("INVITE response $statusCode")
+            SipCallSetupTimerAction.CANCEL -> {
+                outgoingRingbackCallId = null
+                cancelOutgoing("INVITE response $statusCode")
+            }
+            SipCallSetupTimerAction.KEEP ->
+                Rlog.d(
+                    tag,
+                    "Keeping outgoing call setup timer across provisional $statusCode: " +
+                        "callId=$callId",
+                )
         }
     }
 
@@ -72,6 +89,7 @@ internal class SipCallSetupTimers(
     }
 
     private fun cancelOutgoing(reason: String) {
+        outgoingRingbackCallId = null
         if (outgoingCallId != null) {
             Rlog.d(tag, "Cancelling outgoing call setup timer: $reason")
         }
