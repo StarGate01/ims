@@ -315,4 +315,50 @@ class SipMessageTests {
             """,
         )
     }
+
+    private fun responseToTag(statusCode: Int): String? {
+        val response = SipResponse(
+            statusCode = statusCode,
+            statusString = "x",
+            headersParam = mapOf(
+                "to" to listOf("<sip:me@example.test>"),
+                "call-id" to listOf("c1"),
+                "cseq" to listOf("1 INVITE"),
+            ),
+        )
+        return response.toByteArray().decodeToString()
+            .lineSequence()
+            .firstOrNull { it.startsWith("To:", ignoreCase = true) }
+    }
+
+    @Test
+    fun `a 100 Trying is not given an invented To-tag`() {
+        // RFC 3261 8.2.6.2 excludes 100 from the tag rule. A tag here differs from the dialog's
+        // real one, and a P-CSCF anchoring on the first tag it sees cannot then route PRACK.
+        val to = responseToTag(100)
+        require(to != null)
+        require(!to.contains(";tag=")) { "100 Trying carried a To-tag: $to" }
+    }
+
+    @Test
+    fun `other responses still get a To-tag`() {
+        for (code in listOf(180, 183, 200, 486)) {
+            val to = responseToTag(code)
+            require(to != null && to.contains(";tag=")) { "code $code lost its To-tag: $to" }
+        }
+    }
+
+    @Test
+    fun `an existing To-tag is never replaced`() {
+        val response = SipResponse(
+            statusCode = 200,
+            statusString = "OK",
+            headersParam = mapOf(
+                "to" to listOf("<sip:me@example.test>;tag=deadbeef"),
+                "call-id" to listOf("c1"),
+                "cseq" to listOf("1 INVITE"),
+            ),
+        )
+        require(response.toByteArray().decodeToString().contains(";tag=deadbeef"))
+    }
 }

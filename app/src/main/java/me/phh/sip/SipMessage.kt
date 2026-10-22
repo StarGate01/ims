@@ -221,6 +221,15 @@ data class SipResponse(
                 to.map {
                     if (it.contains(";tag=")) {
                         it
+                    } else if (statusCode == 100) {
+                        // RFC 3261 8.2.6.2: a UAS adds a To-tag to every response except 100
+                        // Trying. Inventing one here produces a tag that differs from the one the
+                        // dialog actually uses, and a P-CSCF that anchors the dialog on the first
+                        // tag it sees then cannot route the caller's PRACK against the later
+                        // responses -- the call is set up and dropped seconds after it is
+                        // answered. Observed against a Mavenir core by amikhasenko/ims (fcbc7f0),
+                        // which is the core this fork runs on.
+                        it
                     } else {
                         "$it;tag=${randomBytes(6).toHex()}"
                     }
