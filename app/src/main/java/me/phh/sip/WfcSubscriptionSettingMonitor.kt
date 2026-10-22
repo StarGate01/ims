@@ -10,6 +10,7 @@ import android.os.Handler
 import android.provider.Settings
 import android.os.SystemClock
 import android.telephony.Rlog
+import android.telephony.ims.ImsManager
 
 class WfcSubscriptionSettingMonitor(
     private val tag: String,
@@ -25,6 +26,7 @@ class WfcSubscriptionSettingMonitor(
         val mode: Int?,
     )
 
+    // Observed for change notifications only; the values are read via ImsMmTelManager (readState).
     private val simInfoUri = Uri.parse("content://telephony/siminfo")
     @Volatile private var observedWfcEnabled: Boolean? = null
     @Volatile private var observedWfcMode: Int? = null
@@ -108,36 +110,37 @@ class WfcSubscriptionSettingMonitor(
 
     fun lastChangeUptimeMs(): Long = lastObservedChangeUptimeMs
 
+    /**
+     * Reads the subscription's WFC setting through [ImsMmTelManager] rather than by querying the
+     * siminfo provider directly. The provider guards its WFC columns with a PHONE/SYSTEM UID check
+     * that no permission can satisfy, so a query returns nothing useful unless the app shares the
+     * telephony UID. The manager exposes the same two values behind MODIFY_PHONE_STATE /
+     * READ_PRECISE_PHONE_STATE, which a privileged app can hold. Change *notification* still comes
+     * from the siminfo observer, which needs no such access.
+     */
     private fun readState(): WfcState {
-        return try {
-            ctxt.contentResolver.query(
-                simInfoUri,
-                arrayOf("_id", "wfc_ims_enabled", "wfc_ims_mode"),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                val idColumn = cursor.getColumnIndex("_id")
-                val wfcColumn = cursor.getColumnIndex("wfc_ims_enabled")
-                val modeColumn = cursor.getColumnIndex("wfc_ims_mode")
-                if (idColumn < 0 || wfcColumn < 0) {
-                    Rlog.w(tag, "siminfo is missing WFC columns id=$idColumn wfc=$wfcColumn mode=$modeColumn")
-                    return WfcState(enabled = null, mode = null)
-                }
-                while (cursor.moveToNext()) {
-                    if (cursor.getInt(idColumn) == subId) {
-                        val enabled = cursor.getInt(wfcColumn) == 1
-                        val mode = if (modeColumn >= 0) cursor.getInt(modeColumn) else null
-                        return WfcState(enabled = enabled, mode = mode)
-                    }
-                }
-                Rlog.w(tag, "No siminfo row found for subId=$subId while checking WFC")
-                WfcState(enabled = null, mode = null)
-            } ?: WfcState(enabled = null, mode = null)
+        val manager = try {
+            ctxt.getSystemService(ImsManager::class.java)?.getImsMmTelManager(subId)
         } catch (t: Throwable) {
-            Rlog.d(tag, "Reading WFC subscription property failed", t)
-            WfcState(enabled = null, mode = null)
+            Rlog.d(tag, "Resolving ImsMmTelManager for subId=$subId failed", t)
+            null
+        } ?: return WfcState(enabled = null, mode = null)
+
+        val enabled = try {
+            manager.isVoWiFiSettingEnabled()
+        } catch (t: Throwable) {
+            Rlog.d(tag, "Reading the WFC enabled setting failed for subId=$subId", t)
+            return WfcState(enabled = null, mode = null)
         }
+
+        val mode = try {
+            manager.getVoWiFiModeSetting()
+        } catch (t: Throwable) {
+            Rlog.d(tag, "Reading the WFC mode setting failed for subId=$subId", t)
+            null
+        }
+
+        return WfcState(enabled = enabled, mode = mode)
     }
 
     private fun handleChanged(reason: String) {
