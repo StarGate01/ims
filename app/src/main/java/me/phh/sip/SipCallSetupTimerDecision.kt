@@ -30,7 +30,8 @@ internal object SipCallSetupTimerDecision {
      * is answered with a provisional and then abandoned never fails.
      *
      * - `180 Ringing` is special: the callee is being alerted, so the shorter ringback deadline
-     *   replaces the broad final-response one.
+     *   replaces the broad final-response one. A repeat `180` for the same call keeps the deadline
+     *   already running rather than restarting it.
      * - Any other provisional (`100 Trying`, `183 Session Progress`, `181`, `182`, `199`) arms the
      *   final-response deadline **once**. It is not re-armed while a deadline is already running
      *   for this call, so a network emitting provisionals periodically cannot extend the deadline
@@ -46,7 +47,15 @@ internal object SipCallSetupTimerDecision {
         ringbackCallId: String?,
     ): SipCallSetupTimerAction = when {
         statusCode >= 200 -> SipCallSetupTimerAction.CANCEL
-        statusCode == 180 -> SipCallSetupTimerAction.START_RINGBACK_TIMEOUT
+        // A repeat 180 must not re-arm either: a core that re-sends it periodically would
+        // otherwise extend the ringback deadline for as long as it keeps ringing, which is the
+        // same unbounded-deadline problem this object exists to prevent for other provisionals.
+        statusCode == 180 ->
+            if (ringbackCallId == callId) {
+                SipCallSetupTimerAction.KEEP
+            } else {
+                SipCallSetupTimerAction.START_RINGBACK_TIMEOUT
+            }
         statusCode >= 100 -> when {
             ringbackCallId == callId -> SipCallSetupTimerAction.KEEP
             armedCallId == callId -> SipCallSetupTimerAction.KEEP

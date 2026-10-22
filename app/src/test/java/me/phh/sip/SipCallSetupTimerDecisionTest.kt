@@ -74,4 +74,23 @@ class SipCallSetupTimerDecisionTest {
             }
         }
     }
+
+    @Test
+    fun `a repeat 180 keeps the ringback deadline instead of restarting it`() {
+        // A core that re-sends 180 while the callee is alerted would otherwise extend the
+        // ringback deadline indefinitely -- the same unbounded-deadline problem this object
+        // prevents for every other provisional.
+        require(
+            decide(180, armedCallId = "call-1", ringbackCallId = "call-1")
+                == SipCallSetupTimerAction.KEEP,
+        )
+    }
+
+    @Test
+    fun `a 180 for a different call still arms its own ringback deadline`() {
+        require(
+            decide(180, callId = "call-2", armedCallId = "call-1", ringbackCallId = "call-1")
+                == SipCallSetupTimerAction.START_RINGBACK_TIMEOUT,
+        )
+    }
 }
