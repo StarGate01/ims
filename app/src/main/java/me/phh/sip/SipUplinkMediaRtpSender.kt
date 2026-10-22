@@ -22,6 +22,8 @@ object SipUplinkMediaRtpSender {
         frameType: Int,
         frameSize: Int,
         realFrameCount: Int,
+        onSendFailure: () -> Int = { 0 },
+        onSendSucceeded: () -> Unit = {},
     ): Boolean {
         val packet = SipAmrRtpPayload.buildBandwidthEfficientRtpPacketFromStorageFrame(
             audioCodec = audioCodec,
@@ -37,6 +39,7 @@ object SipUplinkMediaRtpSender {
             return false
         }
 
+        var sent = false
         try {
             if (!RtpPacketSender.send(
                 tag = logTag,
@@ -46,6 +49,7 @@ object SipUplinkMediaRtpSender {
                 remotePort = remotePort,
                 label = "RTP packet #$sequenceNumber",
             )) throw IOException("RTP send failed")
+            sent = true
             if (realFrameCount < 10) {
                 Rlog.d(logTag, "Sent RTP packet #$sequenceNumber ft=$frameType ts=$timestamp payload=${packet.drop(12).take(4).joinToString(" ") { "%02x".format(it) }}... to $remoteAddr:$remotePort")
             }
@@ -56,9 +60,23 @@ object SipUplinkMediaRtpSender {
                 Rlog.d(logTag, "Sent RTP packet #$sequenceNumber ft=$frameType ts=$timestamp to $remoteAddr:$remotePort")
             }
         } catch (e: Exception) {
-            Rlog.e(logTag, "Failed to send RTP packet #$sequenceNumber: ${e.message}", e)
+            val failures = onSendFailure()
+            if (SipUplinkSendFailurePolicy.shouldLog(failures)) {
+                Rlog.e(
+                    logTag,
+                    "Failed to send RTP packet #$sequenceNumber " +
+                        "(consecutive failures: $failures): ${e.message}",
+                    e,
+                )
+            }
+            // Deliberately report success for an isolated failure. The caller stops draining the
+            // encoder when this returns false, which would leave encoded output buffered and can
+            // then block it from accepting input; a dropped datagram is not worth that. A
+            // sustained run is reported through onSendFailure instead.
+            return true
         }
 
+        if (sent) onSendSucceeded()
         return true
     }
 }

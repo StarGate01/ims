@@ -4402,6 +4402,21 @@ fun onWfcDisabled(reason: String) {
                     frameType = frameType,
                     frameSize = frameSize,
                     realFrameCount = frameCount,
+                    onSendFailure = {
+                        val failures = rtpConsecutiveSendFailures.incrementAndGet()
+                        if (SipUplinkSendFailurePolicy.uplinkIsLost(failures) &&
+                            rtpConsecutiveSendFailures.compareAndSet(failures, 0)
+                        ) {
+                            Rlog.w(
+                                TAG,
+                                "Uplink RTP has failed $failures times in a row; " +
+                                    "reconnecting IMS",
+                            )
+                            reconnectIms("uplink RTP send failures")
+                        }
+                        failures
+                    },
+                    onSendSucceeded = { rtpConsecutiveSendFailures.set(0) },
                 )
             },
         )
@@ -4437,6 +4452,7 @@ fun onWfcDisabled(reason: String) {
         rtpDtmfTimestampSamples.set(0)
         val streamSsrc = newRtpSsrc()
         rtpSsrc.set(streamSsrc)
+        rtpConsecutiveSendFailures.set(0)
         Rlog.d(TAG, "RTP stream SSRC for this call: 0x${"%08x".format(streamSsrc)}")
         Rlog.d(
             TAG,
@@ -7026,6 +7042,11 @@ fun onWfcDisabled(reason: String) {
     // A fixed SSRC makes consecutive and overlapping calls indistinguishable to a receiver and
     // defeats its collision detection.
     private val rtpSsrc = AtomicInteger(0)
+
+    // Consecutive failed uplink transmissions. A single failure is ridden out; a sustained run
+    // means the media socket or the bearer is gone, which is worth a reconnect rather than a
+    // silent call. Reset whenever a packet gets through, and per call with the RTP counters.
+    private val rtpConsecutiveSendFailures = AtomicInteger(0)
 
     private fun newRtpSsrc(): Int {
         // Avoid 0, which some stacks treat as unset.
