@@ -60,13 +60,24 @@ internal class SipSmsHandler(
 
         smsLock.withLock {
             pendingOutgoingSmsByCallId[callId] = pending
-            pendingOutgoingSmsByRef[pending.ref] = pending
+            val displaced = pendingOutgoingSmsByRef.put(pending.ref, pending)
+            if (displaced != null) {
+                // The reference is 8 bits, so two messages can be in flight with the same one.
+                // The newer one owns the reference index from here; the displaced message stays
+                // addressable by its Call-ID through In-Reply-To, which is the correlation the
+                // network supplies anyway.
+                Rlog.w(
+                    tag,
+                    "Outgoing SMS ref=${pending.ref} collides with an in-flight message " +
+                        "callId=${displaced.callId}; correlating that one by Call-ID only",
+                )
+            }
         }
 
         timeoutScheduler(carrierSettings.smsPolicy.rpResultWaitMs) {
             val expired = smsLock.withLock {
                 pendingOutgoingSmsByCallId.remove(callId)?.also {
-                    pendingOutgoingSmsByRef.remove(it.ref)
+                    forgetRefIfStillOwnedBy(it)
                 }
             }
 
@@ -86,6 +97,21 @@ internal class SipSmsHandler(
         }
     }
 
+    /**
+     * Drops the reference index entry only while it still points at [pending].
+     *
+     * Two in-flight messages can share an 8-bit reference, and the later one takes over the
+     * index. Removing by reference alone would then let the first message's completion or timeout
+     * delete the second one's entry, leaving a live message unmatchable by reference.
+     *
+     * Callers must already hold smsLock.
+     */
+    private fun forgetRefIfStillOwnedBy(pending: PendingOutgoingSms) {
+        if (pendingOutgoingSmsByRef[pending.ref] === pending) {
+            pendingOutgoingSmsByRef.remove(pending.ref)
+        }
+    }
+
     private fun removePendingOutgoingSms(request: SipRequest, sms: SipSms): PendingOutgoingSms? {
         val inReplyTo = request.headers["in-reply-to"]?.getOrNull(0)
         val ref = smsRefToInt(sms.ref)
@@ -96,7 +122,7 @@ internal class SipSmsHandler(
 
             if (pending != null) {
                 pendingOutgoingSmsByCallId.remove(pending.callId)
-                pendingOutgoingSmsByRef.remove(pending.ref)
+                forgetRefIfStillOwnedBy(pending)
             }
 
             pending
