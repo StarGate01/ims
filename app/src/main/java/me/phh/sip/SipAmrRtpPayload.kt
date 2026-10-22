@@ -93,6 +93,7 @@ internal object SipAmrRtpPayload {
         payloadType: Int,
         sequenceNumber: Int,
         timestamp: Int,
+        ssrc: Int,
         marker: Boolean = false,
     ): ByteArray =
         byteArrayOf(
@@ -104,10 +105,10 @@ internal object SipAmrRtpPayload {
             ((timestamp shr 16) and 0xff).toByte(),
             ((timestamp shr 8) and 0xff).toByte(),
             (timestamp and 0xff).toByte(),
-            0x03,
-            0x00,
-            0xd2.toByte(),
-            0x00,
+            (ssrc shr 24).toByte(),
+            ((ssrc shr 16) and 0xff).toByte(),
+            ((ssrc shr 8) and 0xff).toByte(),
+            (ssrc and 0xff).toByte(),
         )
 
     fun buildNoDataRtpPacket(
@@ -115,6 +116,7 @@ internal object SipAmrRtpPayload {
         payloadType: Int,
         sequenceNumber: Int,
         timestamp: Int,
+        ssrc: Int,
         marker: Boolean = false,
     ): ByteArray {
         // Preserve the current AMR-NB behavior exactly:
@@ -135,6 +137,7 @@ internal object SipAmrRtpPayload {
             payloadType = payloadType,
             sequenceNumber = sequenceNumber,
             timestamp = timestamp,
+            ssrc = ssrc,
             marker = marker,
         ) + noDataPayload
     }
@@ -144,6 +147,7 @@ internal object SipAmrRtpPayload {
         payloadType: Int,
         sequenceNumber: Int,
         timestamp: Int,
+        ssrc: Int,
         storageFrame: ByteArray,
         marker: Boolean = false,
     ): ByteArray? {
@@ -180,6 +184,7 @@ internal object SipAmrRtpPayload {
             payloadType = payloadType,
             sequenceNumber = sequenceNumber,
             timestamp = timestamp,
+            ssrc = ssrc,
             marker = marker,
         ) + payload
     }

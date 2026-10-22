@@ -11,6 +11,7 @@ object SipUplinkSilenceRtpSender {
         payloadType: Int,
         sequenceNumber: Int,
         timestamp: Int,
+        ssrc: Int,
         rtpSocket: DatagramSocket,
         remoteAddr: InetAddress,
         remotePort: Int,
@@ -21,6 +22,7 @@ object SipUplinkSilenceRtpSender {
             payloadType = payloadType,
             sequenceNumber = sequenceNumber,
             timestamp = timestamp,
+            ssrc = ssrc,
         )
         return RtpPacketSender.send(
             tag = logTag,

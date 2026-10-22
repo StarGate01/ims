@@ -13,6 +13,7 @@ object SipUplinkMediaRtpSender {
         payloadType: Int,
         sequenceNumber: Int,
         timestamp: Int,
+        ssrc: Int,
         storageFrame: ByteArray,
         marker: Boolean,
         rtpSocket: DatagramSocket,
@@ -27,6 +28,7 @@ object SipUplinkMediaRtpSender {
             payloadType = payloadType,
             sequenceNumber = sequenceNumber,
             timestamp = timestamp,
+            ssrc = ssrc,
             storageFrame = storageFrame,
             marker = marker,
         )

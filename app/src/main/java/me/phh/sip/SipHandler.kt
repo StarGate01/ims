@@ -4271,6 +4271,7 @@ fun onWfcDisabled(reason: String) {
             payloadType = sendCall.amrTrack,
             sequenceNumber = sequenceNumber,
             timestamp = timestamp,
+            ssrc = rtpSsrc.get(),
             rtpSocket = sendCall.rtpSocket,
             remoteAddr = sendCall.rtpRemoteAddr,
             remotePort = sendCall.rtpRemotePort,
@@ -4392,6 +4393,7 @@ fun onWfcDisabled(reason: String) {
                     payloadType = sendCall.amrTrack,
                     sequenceNumber = sequenceNumber,
                     timestamp = timestamp,
+                    ssrc = rtpSsrc.get(),
                     storageFrame = storageFrame,
                     marker = marker,
                     rtpSocket = sendCall.rtpSocket,
@@ -4433,6 +4435,9 @@ fun onWfcDisabled(reason: String) {
         rtpSequenceNumber.set(0)
         rtpTimestampSamples.set(0)
         rtpDtmfTimestampSamples.set(0)
+        val streamSsrc = newRtpSsrc()
+        rtpSsrc.set(streamSsrc)
+        Rlog.d(TAG, "RTP stream SSRC for this call: 0x${"%08x".format(streamSsrc)}")
         Rlog.d(
             TAG,
             SipUplinkEncodeThreadLog.encodeThreadStarted(
@@ -6950,6 +6955,7 @@ fun onWfcDisabled(reason: String) {
                         payloadType = sendCall.dtmfTrack,
                         sequenceNumber = sequenceNumber,
                         timestamp = timestamp,
+                        ssrc = rtpSsrc.get(),
                         event = event,
                         duration = duration,
                         repeatIndex = index,
@@ -6977,6 +6983,19 @@ fun onWfcDisabled(reason: String) {
     val callGeneration = AtomicInteger(0)
     private val rtpSequenceNumber = AtomicInteger(0)
     private val rtpTimestampSamples = AtomicInteger(0)
+
+    // RFC 3550 wants a random SSRC per stream, kept for that stream's lifetime. Audio and
+    // telephone-event packets share one RTP stream, so both builders are given this same value.
+    // A fixed SSRC makes consecutive and overlapping calls indistinguishable to a receiver and
+    // defeats its collision detection.
+    private val rtpSsrc = AtomicInteger(0)
+
+    private fun newRtpSsrc(): Int {
+        // Avoid 0, which some stacks treat as unset.
+        var ssrc = 0
+        while (ssrc == 0) ssrc = java.security.SecureRandom().nextInt()
+        return ssrc
+    }
     // PhhIms DTMF timestamp guard: each telephone-event digit must get a
     // fresh RTP timestamp even if the normal uplink encoder timestamp stalls.
     private val rtpDtmfTimestampSamples = AtomicInteger(0)
