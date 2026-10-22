@@ -88,22 +88,44 @@ fun sipAkaChallengeForRegistration(
         throw Exception("AKA Challenge from SIP failed tag=0x${responseTag.toString(16)}")
     }
 
-    val responseStream = response.iterator()
-    // 0xdb
-    responseStream.nextByte()
-    val resLen = responseStream.nextByte().toInt()
-    Rlog.d(TAG, "resLen $resLen")
-    val res = (0 until resLen).map { responseStream.nextByte() }.toList()
-    val ckLen = responseStream.nextByte().toInt()
-    Rlog.d(TAG, "ckLen $ckLen")
-    val ck = (0 until ckLen).map { responseStream.nextByte() }.toList()
-    val ikLen = responseStream.nextByte().toInt()
-    Rlog.d(TAG, "ikLen $ikLen")
-    val ik = (0 until ikLen).map { responseStream.nextByte() }.toList()
+    // Tag 0xdb, then three length-prefixed fields: RES, CK, IK. The lengths are unsigned bytes,
+    // and a truncated or malformed response must fail the challenge cleanly rather than throwing
+    // out of an exhausted iterator: reading a length with Byte.toInt() would also sign-extend
+    // anything >= 0x80 into a negative count.
+    var offset = 1
+    fun readField(name: String): ByteArray {
+        if (offset >= response.size) {
+            throw Exception(
+                "AKA response from USIM is truncated before the $name length " +
+                    "(offset=$offset size=${response.size})",
+            )
+        }
+        val length = response[offset].toUByte().toInt()
+        offset++
+        if (length > response.size - offset) {
+            throw Exception(
+                "AKA response from USIM declares $name length $length with only " +
+                    "${response.size - offset} byte(s) left",
+            )
+        }
+        val value = response.copyOfRange(offset, offset + length)
+        offset += length
+        return value
+    }
 
-    Rlog.d(TAG, "USIM AKA authentication succeeded resLen=$resLen ckLen=$ckLen ikLen=$ikLen")
+    val res = readField("RES")
+    val ck = readField("CK")
+    val ik = readField("IK")
+    if (offset != response.size) {
+        Rlog.d(TAG, "AKA response has ${response.size - offset} trailing byte(s); ignoring them")
+    }
+
+    Rlog.d(
+        TAG,
+        "USIM AKA authentication succeeded resLen=${res.size} ckLen=${ck.size} ikLen=${ik.size}",
+    )
     return SipAkaChallengeResult.Success(
-        SipAkaResult(res = res.toByteArray(), ck = ck.toByteArray(), ik = ik.toByteArray())
+        SipAkaResult(res = res, ck = ck, ik = ik)
     )
 }
 
