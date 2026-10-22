@@ -167,6 +167,21 @@ class SipMessageTests {
     }
 
     @Test
+    fun `an empty line is distinguishable from end of stream`() {
+        // What lets the dispatcher keep a connection alive through a keepalive pong instead of
+        // treating every null message as the stream being finished.
+        val withMore = (keepaliveMessage + messageRequest).inputStream().sipReader()
+        require(withMore.parseMessage() == null)
+        require(withMore.hasMoreInput())
+        require(withMore.parseMessage() is SipRequest)
+        require(!withMore.hasMoreInput())
+
+        val pongOnly = keepaliveMessage.inputStream().sipReader()
+        require(pongOnly.parseMessage() == null)
+        require(!pongOnly.hasMoreInput())
+    }
+
+    @Test
     fun `check autofill adds missing headers`() {
         val headers = """
             From: test

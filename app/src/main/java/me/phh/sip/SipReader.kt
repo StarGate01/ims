@@ -63,6 +63,21 @@ class SipReader(input: InputStream) : InputStream() {
      * terminates the header section and is represented as null for the
      * existing lineSequence parser contract.
      */
+    /**
+     * Whether any byte remains, without consuming it.
+     *
+     * Lets a caller tell an empty line apart from end of stream: [parseMessage] returns null for
+     * both, but only the latter means the connection is finished. RFC 3261 section 7.5 allows
+     * stray CRLFs between messages and an RFC 5626 keepalive "pong" is exactly a bare CRLF, so
+     * treating every null as end of stream closes a healthy connection.
+     */
+    fun hasMoreInput(): Boolean {
+        val c = input.read()
+        if (c == -1) return false
+        input.unread(c)
+        return true
+    }
+
     fun readLine(): String? {
         val first = readPhysicalLine() ?: return null
         if (first.isEmpty()) return null
