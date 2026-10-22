@@ -5,6 +5,10 @@ import android.telephony.ims.ImsReasonInfo
 
 internal object SipImsReasonCodeMapper {
     fun fromStatusCode(statusCode: Int): Int = when (statusCode) {
+        // 380 Alternative Service is the network telling us to place this call in another domain.
+        // Reported as a generic redirect, telephony fails the call; reported as a CS retry it
+        // redials over the circuit-switched domain, which is what the status means.
+        380 -> ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED
         403 -> ImsReasonInfo.CODE_SIP_FORBIDDEN
         404 -> ImsReasonInfo.CODE_SIP_NOT_FOUND
         408 -> ImsReasonInfo.CODE_SIP_REQUEST_TIMEOUT
