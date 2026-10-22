@@ -22,6 +22,19 @@ object SipAudioRecordStarter {
         if (previousAudioMode != AudioManager.MODE_IN_COMMUNICATION) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         }
+
+        // Samsung's HAL starts a modem voice call when the mode goes to MODE_IN_CALL at dial, and
+        // that call keeps the voice path even after the mode becomes MODE_IN_COMMUNICATION -- the
+        // uplink then carries the modem's silent baseband stream instead of the microphone. This
+        // vendor key stops it. Other HALs ignore an unknown key, so it is safe to send
+        // unconditionally. Normally redundant now that MODE_IN_CALL no longer happens at all for
+        // these calls, and kept as a guard for any path that still reaches it.
+        try {
+            audioManager.setParameters("g_call_state=1")
+        } catch (t: Throwable) {
+            Rlog.d(logTag, "Vendor g_call_state parameter rejected", t)
+        }
+
         try {
             audioRecord.startRecording()
         } catch (t: Throwable) {
