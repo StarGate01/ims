@@ -53,6 +53,48 @@ class SipCarrierDatabaseTest {
     )
 
     @Test
+    fun `emergency profile selection is independent of the voice profile`() {
+        val emergency = voiceProfile().copy(
+            name = "Test Emergency",
+            pdn = "emergency",
+            emergency = true,
+            services = setOf("mmtel"),
+            networks = setOf("lte", "nr"),
+            sosUrnRequired = false,
+        )
+        val record = SipCarrierDatabaseRecord(
+            mapping = SipCarrierDatabaseMapping("00101", "001001", "Test_MNO"),
+            // Deliberately emergency-first: selection must not depend on ordering.
+            profiles = listOf(emergency, voiceProfile()),
+            serviceSwitches = emptyMap(),
+            csfbStatusRules = emptySet(),
+            voiceCsfbStatusRules = emptySet(),
+            emergencyDomain = "PS",
+        )
+
+        require(record.voiceProfile?.name == "Test IMS")
+        require(record.emergencyProfile?.name == "Test Emergency")
+        require(record.emergencySupported)
+    }
+
+    @Test
+    fun `a carrier without an emergency profile reports no emergency support`() {
+        val record = SipCarrierDatabaseRecord(
+            mapping = SipCarrierDatabaseMapping("00101", "001001", "Test_MNO"),
+            profiles = listOf(voiceProfile()),
+            serviceSwitches = emptyMap(),
+            csfbStatusRules = emptySet(),
+            voiceCsfbStatusRules = emptySet(),
+            emergencyDomain = null,
+        )
+
+        require(record.emergencyProfile == null)
+        require(!record.emergencySupported)
+        // The voice profile must never be mistaken for an emergency one.
+        require(record.voiceProfile != null)
+    }
+
+    @Test
     fun `Samsung IP and transport values keep distinct semantics`() {
         val ipv4 = InetAddress.getByName("192.0.2.1")
         val ipv6 = InetAddress.getByName("2001:db8::1")

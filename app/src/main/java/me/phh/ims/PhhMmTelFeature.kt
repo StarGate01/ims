@@ -21,6 +21,7 @@ import android.telephony.ims.stub.ImsCallSessionImplBase
 import android.telephony.ims.stub.ImsMultiEndpointImplBase
 import android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE
 import android.telephony.ims.stub.ImsSmsImplBase
+import android.telephony.ims.stub.ImsEcbmImplBase
 import android.telephony.ims.stub.ImsUtImplBase
 import java.util.concurrent.Executors
 import java.lang.Object
@@ -647,7 +648,50 @@ class PhhMmTelFeature(
             Rlog.d(TAG, "Starting outgoing IMS call")
             outgoingCallProgressReported = false
 
-            if (!sipHandler.isReadyForOutgoingCall()) {
+            val emergency = isEmergencyCallProfile(profile) ||
+                isEmergencyCallProfile(currentCallProfile)
+            if (emergency) {
+                Rlog.w(TAG, "Outgoing call is an emergency call")
+                // sipHandler is lateinit and stays unset while the slot has no usable
+                // subscription — which is precisely the no-SIM emergency case this feature now
+                // accepts, so it must be checked before any use.
+                val handlerReady = this@PhhMmTelFeature::sipHandler.isInitialized
+                if (!handlerReady) {
+                    Rlog.w(TAG, "Emergency call with no IMS handler for this slot (no subscription)")
+                }
+                if (!handlerReady || !sipHandler.mayPlaceEmergencyCallOverIms()) {
+                    // Hand the call straight back to telephony so it redials over CS. This is
+                    // the behaviour of this install whenever emergency-over-IMS is not fully
+                    // available, and the reason this feature can be declared safely.
+                    Rlog.w(
+                        TAG,
+                        "Emergency call not attempted over IMS; requesting circuit-switched redial",
+                    )
+                    mState = State.TERMINATED
+                    if (this::mListener.isInitialized) {
+                        mListener.callSessionInitiatingFailed(
+                            ImsReasonInfo(
+                                ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED,
+                                ImsReasonInfo.EXTRA_CODE_CALL_RETRY_SILENT_REDIAL,
+                                "Emergency over IMS unavailable",
+                            )
+                        )
+                    } else {
+                        Rlog.e(
+                            TAG,
+                            "No listener set while declining an emergency call; " +
+                                "telephony cannot be told to retry over CS",
+                        )
+                    }
+                    return
+                }
+            }
+
+            if (!this@PhhMmTelFeature::sipHandler.isInitialized ||
+                !sipHandler.isReadyForOutgoingCall()
+            ) {
+                // The initialized check matters since this feature can also be created without a
+                // subscription for emergency use; a missing handler must decline, never crash.
                 Rlog.w(TAG, "Rejecting outgoing call while IMS is reconnecting/not ready")
                 mState = State.TERMINATED
 
@@ -668,7 +712,7 @@ class PhhMmTelFeature(
 
             outgoingCallActive = true
             outgoingCallSipCallId = null
-            sipHandler.call(callee)
+            sipHandler.call(callee, emergency = emergency)
         }
 
             override fun getState(): Int {
@@ -897,6 +941,44 @@ class PhhMmTelFeature(
     override fun getSmsImplementation(): ImsSmsImplBase {
         Rlog.d(TAG, "$slotId getSmsImplementation")
         return imsSms
+    }
+
+    /**
+     * Whether a call profile describes an emergency call.
+     *
+     * Telephony marks these two ways and does not always use both: the service type is set by
+     * `ImsPhoneCallTracker` for a detected emergency number, while the extra is set for calls
+     * that reach the emergency path by another route. Treat either as authoritative.
+     */
+    private fun isEmergencyCallProfile(profile: ImsCallProfile?): Boolean {
+        if (profile == null) return false
+        if (profile.serviceType == ImsCallProfile.SERVICE_TYPE_EMERGENCY) return true
+        return profile.getCallExtraBoolean(ImsCallProfile.EXTRA_EMERGENCY_CALL, false)
+    }
+
+    /**
+     * Emergency callback mode.
+     *
+     * The framework asks for this interface whenever the feature is emergency-capable, and a
+     * missing implementation surfaces as a remote exception in telephony. ECBM is a network and
+     * modem state that this stack does not drive, so the implementation reports that the device
+     * is not in callback mode and accepts a request to leave it; it must exist, and it must not
+     * claim a state it cannot observe.
+     */
+    private val ecbm = object : ImsEcbmImplBase() {
+        override fun exitEmergencyCallbackMode() {
+            Rlog.w(TAG, "$slotId exitEmergencyCallbackMode requested; reporting exited")
+            try {
+                exitedEcbm()
+            } catch (t: Throwable) {
+                Rlog.e(TAG, "$slotId failed reporting ECBM exit", t)
+            }
+        }
+    }
+
+    override fun getEcbm(): ImsEcbmImplBase {
+        Rlog.d(TAG, "$slotId getEcbm")
+        return ecbm
     }
 
     override fun getUt(): ImsUtImplBase {

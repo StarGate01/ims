@@ -99,6 +99,22 @@ data class SipCarrierDatabaseRecord(
             !it.emergency && it.pdn == "ims" && "mmtel" in it.services
         }
 
+    /**
+     * The carrier's emergency MMTEL profile, if one is provisioned.
+     *
+     * Stock carries this as a second profile on the emergency PDN; for 1&1 it is the voice
+     * profile minus the supplementary features plus `emergency_support` and an emergency
+     * registration timer (samsung-calling.md §15.3). It is matched on the emergency flag rather
+     * than on `pdn == "emergency"` so a carrier that marks emergency support on a differently
+     * named PDN is still found.
+     */
+    val emergencyProfile: SipCarrierDatabaseProfile?
+        get() = profiles.firstOrNull { it.emergency && "mmtel" in it.services }
+
+    /** True when the carrier provisions IMS emergency calling at all. */
+    val emergencySupported: Boolean
+        get() = emergencyProfile != null
+
     fun applyTo(base: SipCarrierPolicy): SipCarrierPolicy {
         val profile = voiceProfile ?: return base
         val supportedAuthAlgorithms = profile.authAlgorithms.filter {
@@ -152,6 +168,7 @@ data class SipCarrierDatabaseRecord(
             evsEnabled = profile.enableEvsCodec,
             emergencyDomain = emergencyDomain,
             emergencyCsfbStatusRules = emergencyCsfbStatusRules,
+            emergencySupported = emergencySupported,
             noSimEmergencyDomain = noSimEmergencyDomain,
             supplementaryServiceDomain = supplementaryServiceDomain,
             supplementaryServiceCallForwardUriType =

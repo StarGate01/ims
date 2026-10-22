@@ -31,6 +31,20 @@ class SipHandler(
 ) {
     companion object {
         private const val TAG = "PHH SipHandler"
+
+        // Emergency calling over IMS is off by default: with it off the stack reports a CS retry
+        // and telephony redials over the circuit-switched domain, which is exactly the behaviour
+        // of this install before emergency support was added. See samsung-calling.md §15.
+        private const val EMERGENCY_OVER_IMS_PROPERTY = "persist.phh.ims.emergency"
+
+        // Builds and logs the emergency INVITE without sending it.
+        //
+        // WARNING: this makes the *IMS* leg a no-op only. The emergency failure still reports a
+        // CS retry, as it must, so telephony places the call over the circuit-switched domain --
+        // and a call classified as an emergency call reaches real emergency services regardless
+        // of the number dialled. This flag does not make an emergency dial safe to attempt. See
+        // samsung-calling.md §15.4.
+        private const val EMERGENCY_DRY_RUN_PROPERTY = "persist.phh.ims.emergency_dryrun"
         // Keep RTP receive() short. Android/libcore synchronizes DatagramSocket
         // send() and receive() on the same socket object; a long blocking receive
         // can therefore stall uplink RTP sends for the whole SO_TIMEOUT window.
@@ -118,6 +132,20 @@ class SipHandler(
     private val mcc = carrierSettings.mcc
     private val mnc = carrierSettings.mnc
     private val imsi = subTelephonyManager.subscriberId
+
+    init {
+        // Emergency posture, logged once per handler so it can be read without placing a call.
+        Rlog.i(
+            TAG,
+            "Emergency over IMS posture: carrierProvisioned=${carrierSettings.emergencySupported} " +
+                "sosUrnRequired=${carrierSettings.sosUrnRequired} " +
+                "enabledByProperty=${
+                    android.os.SystemProperties.getBoolean(EMERGENCY_OVER_IMS_PROPERTY, false)
+                } dryRun=${
+                    android.os.SystemProperties.getBoolean(EMERGENCY_DRY_RUN_PROPERTY, false)
+                }",
+        )
+    }
 
     // dual-SIM IMS context logging.
     // Keep ambiguous SIP/IMS events tied to the exact SipHandler subscription.
@@ -810,6 +838,37 @@ fun setRequestCallback(method: SipMethod, cb: (SipRequest) -> Int) {
             registeredOverIwlan = imsRegistrationTech == REGISTRATION_TECH_IWLAN,
         )
     }
+    /**
+     * Whether an emergency call may be attempted over this IMS registration.
+     *
+     * Three independent conditions, all of which must hold (see [SipEmergencyDialPolicy]). A
+     * false answer means the caller must hand the call back to telephony for a CS redial, which
+     * is the behaviour of this install when emergency-over-IMS is disabled.
+     */
+    fun mayPlaceEmergencyCallOverIms(): Boolean {
+        val enabled = android.os.SystemProperties.getBoolean(
+            EMERGENCY_OVER_IMS_PROPERTY,
+            false,
+        )
+        val provisioned = carrierSettings.emergencySupported
+        val ready = isReadyForOutgoingCall()
+        val allowed = SipEmergencyDialPolicy.mayAttemptOverIms(
+            enabled = enabled,
+            carrierProvisionsEmergency = provisioned,
+            registered = ready,
+        )
+        Rlog.i(
+            TAG,
+            "Emergency over IMS allowed=$allowed enabled=$enabled " +
+                "carrierProvisioned=$provisioned registrationReady=$ready",
+        )
+        return allowed
+    }
+
+    /** True when the emergency INVITE should be built and logged but not sent (dry run). */
+    fun emergencyDryRun(): Boolean =
+        android.os.SystemProperties.getBoolean(EMERGENCY_DRY_RUN_PROPERTY, false)
+
     fun isReadyForOutgoingCall(): Boolean {
         val baseReady =
             imsReady &&
@@ -5520,6 +5579,7 @@ fun onWfcDisabled(reason: String) {
     private fun buildOutgoingInviteRequest(
         phoneNumber: String,
         outgoingInviteBody: ByteArray,
+        emergency: Boolean = false,
     ): OutgoingInviteRequestContext {
         val normalizedPhoneNumber = normalizeOutgoingDialTargetForTelUri(phoneNumber)
         val localEndpoint =
@@ -5563,6 +5623,7 @@ fun onWfcDisabled(reason: String) {
                 imsRegistrationTech,
             ),
             supportSecurityAgreement = carrierSettings.ipsecSupported,
+            emergency = emergency,
         )
     }
 
@@ -6599,16 +6660,40 @@ fun onWfcDisabled(reason: String) {
     private fun sendInitialOutgoingInvite(
         phoneNumber: String,
         rtpSocket: DatagramSocket,
+        emergency: Boolean = false,
     ): Boolean {
         val outgoingInviteSdpOffer = buildOutgoingInviteSdpOffer(rtpSocket)
         val outgoingInviteBody = outgoingInviteSdpOffer.inviteBody
 
         val outgoingInviteRequestContext = buildOutgoingInviteRequest(
+            emergency = emergency,
             phoneNumber = phoneNumber,
             outgoingInviteBody = outgoingInviteBody,
         )
         val msg = outgoingInviteRequestContext.request
         Rlog.i(TAG, "Outgoing INVITE shape: ${SipCarrierDiagnostics.requestShape(msg)}")
+        if (emergency) {
+            Rlog.i(
+                TAG,
+                "Emergency INVITE built: requestUri=${outgoingInviteRequestContext.targetUri} " +
+                    "to=${outgoingInviteRequestContext.telUri} " +
+                    "sosUrn=${SipEmergencyDialPolicy.isSosUrn(outgoingInviteRequestContext.telUri)}",
+            )
+            if (emergencyDryRun()) {
+                // Tier-1 verification: everything up to the write is exercised, nothing is sent.
+                Rlog.w(
+                    TAG,
+                    "Emergency dry run: INVITE not sent, reporting setup failure so the call " +
+                        "falls back to the circuit-switched domain",
+                )
+                failOutgoingCallSetup(
+                    statusString = "Emergency dry run",
+                    logReason = "emergency dry run requested by property",
+                    rtpSocket = rtpSocket,
+                )
+                return false
+            }
+        }
         val singtelStockOutgoingTargetUri = outgoingInviteRequestContext.targetUri
         val normalizedPhoneNumber = outgoingInviteRequestContext.normalizedPhoneNumber
 
@@ -6634,7 +6719,7 @@ fun onWfcDisabled(reason: String) {
         )
     }
 
-    fun call(phoneNumber: String) {
+    fun call(phoneNumber: String, emergency: Boolean = false) {
         thread {
             callStopped.set(false)
             callStarted.set(false)
@@ -6666,6 +6751,7 @@ fun onWfcDisabled(reason: String) {
                     sendInitialOutgoingInvite(
                         phoneNumber = phoneNumber,
                         rtpSocket = rtpSocket,
+                        emergency = emergency,
                     )
                 ) {
                     outgoingCallSetupInProgress.set(false)

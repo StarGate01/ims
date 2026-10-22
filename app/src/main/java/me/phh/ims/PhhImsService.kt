@@ -9,7 +9,11 @@ import android.content.IntentFilter
 import android.os.Binder
 import android.os.SystemClock
 import android.telephony.Rlog
+<<<<<<< HEAD
 import android.telephony.TelephonyManager
+=======
+import android.telephony.SubscriptionManager
+>>>>>>> c40db2d (ims: groundwork for emergency calling over IMS, off by default)
 import android.telephony.ims.ImsService
 import android.telephony.ims.feature.ImsFeature
 import android.telephony.ims.feature.MmTelFeature
@@ -132,6 +136,29 @@ class PhhImsService : ImsService() {
         return synchronized(stateLock) {
             mmTelFeaturesBySlot.getOrPut(slotId) {
                 PhhMmTelFeature(slotId, subscriptionId)
+            }
+        }
+    }
+
+    /**
+     * Emergency-only MMTEL feature, created when the slot has no usable subscription.
+     *
+     * The framework calls this only when no MMTEL feature exists for the slot yet
+     * (`ImsService.createEmergencyOnlyMmTelFeature` returns the existing feature's binder
+     * otherwise), and registers whatever is returned as `FEATURE_MMTEL`. Returning the same
+     * per-slot feature therefore keeps a single instance across the no-SIM to SIM transition;
+     * `createMmTelFeatureForSubscription` then notifies it of the real subscription.
+     *
+     * Without a subscription there are no IMS credentials, so this instance cannot register and
+     * will decline emergency calls over IMS — telephony then places them over CS, which is the
+     * correct outcome for a device with no usable SIM.
+     */
+    override fun createEmergencyOnlyMmTelFeature(slotId: Int): MmTelFeature {
+        Rlog.d(TAG, "createEmergencyOnlyMmTelFeature slotId=$slotId")
+
+        return synchronized(stateLock) {
+            mmTelFeaturesBySlot.getOrPut(slotId) {
+                PhhMmTelFeature(slotId, SubscriptionManager.INVALID_SUBSCRIPTION_ID)
             }
         }
     }

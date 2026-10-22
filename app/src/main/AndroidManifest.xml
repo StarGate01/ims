@@ -42,6 +42,11 @@
                  applications and must reside in the /system/priv-app/ or /product/priv-app/
             folder to grant the appropriate permissions... -->
         <meta-data android:name="android.telephony.ims.MMTEL_FEATURE" android:value="true"/>
+        <!-- Emergency MMTEL is only honoured by ImsResolver when MMTEL is declared too. Declaring
+             it lets telephony route emergency calls here instead of going straight to CS; the
+             behaviour itself is off until persist.phh.ims.emergency is set, and with it off the
+             stack asks telephony to redial over CS. See samsung-calling.md §15. -->
+        <meta-data android:name="android.telephony.ims.EMERGENCY_MMTEL_FEATURE" android:value="true"/>
         <intent-filter>
             <action android:name="android.telephony.ims.ImsService" />
         </intent-filter>

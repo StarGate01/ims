@@ -281,6 +281,8 @@ data class SipCarrierPolicy(
     val evsEnabled: Boolean = false,
     val emergencyDomain: String? = null,
     val emergencyCsfbStatusRules: Set<String> = emptySet(),
+    /** The carrier database carries an emergency-capable MMTEL profile. */
+    val emergencySupported: Boolean = false,
     val noSimEmergencyDomain: String? = null,
     val supplementaryServiceDomain: String? = null,
     val supplementaryServiceCallForwardUriType: String? = null,
@@ -605,6 +607,14 @@ data class SipCarrierSettings(
 
     fun isFallbackEmergencyDialString(normalizedPhoneNumber: String): Boolean =
         policy.isFallbackEmergencyDialString(normalizedPhoneNumber)
+
+    /** The carrier provisions an emergency-capable MMTEL profile (samsung-calling.md §15.3). */
+    val emergencySupported: Boolean
+        get() = policy.emergencySupported
+
+    /** See [SipEmergencyDialPolicy.csfbRetryIsNormalCall] for what the carrier means by this. */
+    val sosUrnRequired: Boolean
+        get() = policy.sosUrnRequired
 
     fun normalizePublicNumberToE164(stripped: String): String? =
         policy.normalizePublicNumberToE164(stripped)

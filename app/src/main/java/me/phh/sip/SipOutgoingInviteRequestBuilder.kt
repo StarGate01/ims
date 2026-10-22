@@ -79,6 +79,7 @@ internal object SipOutgoingInviteRequestBuilder {
         singtelPublicSipUri: (String) -> String,
         preconditionEnabled: Boolean = true,
         supportSecurityAgreement: Boolean = true,
+        emergency: Boolean = false,
     ): OutgoingInviteRequestContext {
         val baseRequestContext = buildBaseRequestContext(
             logTag = logTag,
@@ -99,6 +100,7 @@ internal object SipOutgoingInviteRequestBuilder {
             accessNetworkHeaders = accessNetworkHeaders,
             preconditionEnabled = preconditionEnabled,
             supportSecurityAgreement = supportSecurityAgreement,
+            emergency = emergency,
         )
         val carrierRequestShape = buildCarrierRequestShape(
             normalizedPhoneNumber = baseRequestContext.normalizedPhoneNumber,
@@ -116,6 +118,7 @@ internal object SipOutgoingInviteRequestBuilder {
             singtelStockOutgoingCarrier = singtelStockOutgoingCarrier,
             singtelPublicSipUri = singtelPublicSipUri,
             supportSecurityAgreement = supportSecurityAgreement,
+            emergency = emergency,
         )
         return buildRequestContext(
             outgoingInviteBody = outgoingInviteBody,
@@ -143,8 +146,13 @@ internal object SipOutgoingInviteRequestBuilder {
         accessNetworkHeaders: SipHeadersMap,
         preconditionEnabled: Boolean,
         supportSecurityAgreement: Boolean,
+        emergency: Boolean,
     ): OutgoingInviteBaseRequestContext {
-        val to = shortServiceTelUri(
+        // TS 24.229: an emergency request is addressed to a service URN, never to the dialled
+        // digits. The network resolves the URN against the serving location.
+        val to = if (emergency) {
+            SipEmergencyDialPolicy.requestUri()
+        } else shortServiceTelUri(
             normalizedPhoneNumber = normalizedPhoneNumber,
             carrierSettings = carrierSettings,
             realm = realm,
@@ -234,19 +242,26 @@ internal object SipOutgoingInviteRequestBuilder {
         singtelStockOutgoingCarrier: Boolean,
         singtelPublicSipUri: (String) -> String,
         supportSecurityAgreement: Boolean,
+        emergency: Boolean,
     ): OutgoingInviteCarrierRequestShape {
-        val databaseOutgoingTargetUri = carrierSettings.outgoingTargetUri(
-            telUri = telUri,
-            realm = realm,
-            registeredSipUri = registeredSipUri,
-        )
-        val singtelStockOutgoingTargetUri = if (singtelStockOutgoingCarrier) {
+        // An emergency target must reach the network verbatim as the service URN: no SIP-URI
+        // rewrite, no carrier-specific public-URI substitution.
+        val databaseOutgoingTargetUri = if (emergency) {
+            telUri
+        } else {
+            carrierSettings.outgoingTargetUri(
+                telUri = telUri,
+                realm = realm,
+                registeredSipUri = registeredSipUri,
+            )
+        }
+        val singtelStockOutgoingTargetUri = if (singtelStockOutgoingCarrier && !emergency) {
             singtelPublicSipUri(normalizedPhoneNumber)
         } else {
             databaseOutgoingTargetUri
         }
 
-        val singtelStockOutgoingHeaders = if (singtelStockOutgoingCarrier) {
+        val singtelStockOutgoingHeaders = if (singtelStockOutgoingCarrier && !emergency) {
             val singtelStockIdentity = singtelPublicSipUri(myTel)
             val singtelStockFromTag = baseHeaders["from"]?.firstOrNull()
                 ?.substringAfter(";tag=", missingDelimiterValue = "")
