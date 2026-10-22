@@ -142,7 +142,7 @@ internal class SipDispatcher(
         }
 
         val requestCb = lock.withLock { requestCallbacks[msg.method] }
-        var status = 200
+        var status = defaultStatusForUnhandled(msg.method)
         if (requestCb != null) {
             status = try {
                 requestCb(msg)
@@ -176,6 +176,7 @@ internal class SipDispatcher(
                 487 -> "Request Terminated"
                 488 -> "Not Acceptable Here"
                 491 -> "Request Pending"
+                501 -> "Not Implemented"
                 500 -> "Server Internal Error"
                 603 -> "Decline"
                 else -> "ERROR"
@@ -219,6 +220,25 @@ internal class SipDispatcher(
         }
         return true
     }
+    /**
+     * What to answer a request this stack recognises but registers no handler for.
+     *
+     * A method outside [SipMethod] never reaches here: the parser returns a SipCommonMessage for
+     * it and the caller closes the connection. The unhandled set is therefore just the methods
+     * this stack parses but does not act on, and 200 OK is not wrong for all of them:
+     *
+     * - OPTIONS: RFC 3261 section 11.2 expects 200 OK, so a bare acknowledgement is correct.
+     * - NOTIFY: RFC 6665 section 4.4.1 requires the subscriber to answer it, and this stack
+     *   subscribes to the reg event, so answering anything else would break its own subscription.
+     * - SUBSCRIBE: 200 OK would claim a subscription this stack will never send a NOTIFY for,
+     *   leaving the peer waiting. 501 says plainly that it is not implemented.
+     * - REGISTER: a UE is not a registrar. Unreachable in practice, and 501 is honest.
+     */
+    private fun defaultStatusForUnhandled(method: SipMethod): Int = when (method) {
+        SipMethod.SUBSCRIBE, SipMethod.REGISTER -> 501
+        else -> 200
+    }
+
     private fun responseTransactionKey(
         response: SipResponse,
         callId: String,

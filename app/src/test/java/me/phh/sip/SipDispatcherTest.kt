@@ -79,4 +79,50 @@ class SipDispatcherTest {
         require(!dispatcher.hasWriterForCallId("first"))
         require(dispatcher.hasWriterForCallId("second"))
     }
+
+    private fun request(method: String, callId: String): ByteArray =
+        (
+            "$method sip:peer@example.test SIP/2.0\r\n" +
+                "Via: SIP/2.0/TCP 192.0.2.1:5060;branch=z9hG4bK1\r\n" +
+                "From: <sip:peer@example.test>;tag=a\r\n" +
+                "To: <sip:me@example.test>\r\n" +
+                "Call-ID: $callId\r\n" +
+                "CSeq: 1 $method\r\n" +
+                "Content-Length: 0\r\n" +
+                "\r\n"
+            ).toByteArray()
+
+    private fun statusLineFor(method: String): String {
+        val dispatcher = SipDispatcher("test")
+        val out = ByteArrayOutputStream()
+        val reader = ByteArrayInputStream(request(method, "c-$method")).sipReader()
+        dispatcher.parseMessage(reader, out)
+        return out.toByteArray().decodeToString().lineSequence().first().trim()
+    }
+
+    @Test
+    fun `an unhandled OPTIONS is acknowledged`() {
+        // RFC 3261 section 11.2: 200 OK is the correct answer, so the default must stay.
+        require(statusLineFor("OPTIONS").startsWith("SIP/2.0 200")) { statusLineFor("OPTIONS") }
+    }
+
+    @Test
+    fun `an unhandled NOTIFY is acknowledged`() {
+        // RFC 6665 section 4.4.1 requires answering it, and this stack subscribes to the reg
+        // event: refusing a NOTIFY would break its own subscription.
+        require(statusLineFor("NOTIFY").startsWith("SIP/2.0 200")) { statusLineFor("NOTIFY") }
+    }
+
+    @Test
+    fun `an unhandled SUBSCRIBE is refused rather than silently accepted`() {
+        // 200 OK would promise a subscription this stack never sends a NOTIFY for.
+        val line = statusLineFor("SUBSCRIBE")
+        require(line.startsWith("SIP/2.0 501")) { line }
+        require(line.contains("Not Implemented")) { line }
+    }
+
+    @Test
+    fun `an unhandled REGISTER is refused`() {
+        require(statusLineFor("REGISTER").startsWith("SIP/2.0 501")) { statusLineFor("REGISTER") }
+    }
 }
