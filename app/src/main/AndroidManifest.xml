@@ -2,8 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="me.phh.ims"
     coreApp="true"
-    android:persistent="true"
-    android:sharedUserId="android.uid.system">
+    android:persistent="true">
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -13,6 +12,18 @@
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Upstream builds platform-signed with sharedUserId=android.uid.system and
+         inherits these from the system uid. This build is not platform-signed
+         (device platform key is lineageos4microg), so they must be requested. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
+    <!-- TelephonyManager.getAllCellInfo(), used to build the SIP
+         P-Access-Network-Info header, is gated on fine location. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:allowBackup="false"

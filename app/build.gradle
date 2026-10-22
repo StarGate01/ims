@@ -3,7 +3,10 @@ plugins {
     id 'kotlin-android'
 }
 
-def platformApiJar = providers.gradleProperty('platformApiJar').orNull
+// Resolved from the repository root, so a repo-relative path such as
+// -PplatformApiJar=platform-api.jar works from any module.
+def platformApiJarProp = providers.gradleProperty('platformApiJar').orNull
+def platformApiJar = platformApiJarProp != null ? rootProject.file(platformApiJarProp) : null
 
 android {
     compileSdk 33
@@ -49,6 +52,21 @@ android {
         }
     }
     namespace 'me.phh.ims'
+}
+
+if (platformApiJar != null) {
+    // compileOnly (below) is enough for Kotlin, which takes the first match on
+    // its compile classpath. javac does not see it: AGP passes the SDK's
+    // android.jar as -bootclasspath, and javac searches the bootclasspath
+    // before the classpath, so the public stubs win and sources touching
+    // protected platform members (PhhMmTelFeatureProtected) fail to compile.
+    // Prepend instead of replacing — the SDK jar still supplies java.*.
+    tasks.withType(JavaCompile).configureEach { t ->
+        t.doFirst {
+            t.options.bootstrapClasspath =
+                files(platformApiJar) + t.options.bootstrapClasspath
+        }
+    }
 }
 
 dependencies {

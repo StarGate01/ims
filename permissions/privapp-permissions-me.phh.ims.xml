@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allowlist for the signature|privileged permissions me.phh.ims requests.
+  Required because ro.control_privapp_permissions=enforce on this device.
+  protectionLevel values read from `pm list permissions -f` on the device.
+-->
+<permissions>
+    <privapp-permissions package="me.phh.ims">
+        <!-- signature|privileged|role -->
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
+        <permission name="android.permission.MODIFY_PHONE_STATE"/>
+        <!-- signature|privileged|appop -->
+        <permission name="android.permission.SCHEDULE_EXACT_ALARM"/>
+        <!-- signature|privileged -->
+        <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
+    </privapp-permissions>
+</permissions>

@@ -7,4 +7,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Ims"
 include ':app'
+include ':overlay'
 include ':overlay-fwk'

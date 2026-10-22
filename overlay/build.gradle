@@ -1,0 +1,36 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'me.phh.ims.overlay'
+    // The <overlay> element's isStatic/priority attributes are not in the
+    // API 33 attrs_manifest; link against the newer platform.
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 32
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+    }
+
+    // Without this, AGP also generates and dexes BuildConfig.
+    buildFeatures {
+        buildConfig false
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            res.srcDirs = ['res']
+            java.srcDirs = []
+        }
+    }
+
+    // Nothing to lint in a resources-only APK, and lintVital would otherwise
+    // need an extra artifact at assemble time.
+    lint {
+        checkReleaseBuilds false
+    }
+}

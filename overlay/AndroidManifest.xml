@@ -2,6 +2,9 @@
 	package="me.phh.ims.overlay"
 	android:versionCode="1"
 	android:versionName="1.0">
+	<!-- Resources-only APK: no classes to load. Soong's
+	     runtime_resource_overlay injects this; AGP does not. -->
+	<application android:hasCode="false" />
 	<overlay android:targetPackage="com.android.phone"
 		android:isStatic="true"
 		android:priority="100"
