@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<!-- Report IMS calls to Telecom as using VoIP audio mode, which is what an
+	     in-app MMTEL stack actually does: the call audio is app-managed PCM in
+	     MODE_IN_COMMUNICATION rather than a modem-owned stream. Telecom then owns
+	     the audio mode, which is the prerequisite for its in-call route controls
+	     to take effect. -->
+	<bool name="config_use_voip_mode_for_ims">true</bool>
+</resources>

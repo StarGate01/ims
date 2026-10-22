@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+	package="me.phh.ims.overlay.fwk"
+	android:versionCode="1"
+	android:versionName="1.0">
+	<!-- Resources-only APK: no classes to load. Separate from the
+	     com.android.phone overlay because one RRO targets one package, and
+	     this one overrides a framework-res resource. -->
+	<application android:hasCode="false" />
+	<overlay android:targetPackage="android"
+		android:isStatic="true"
+		android:priority="100"
+		/>
+</manifest>
